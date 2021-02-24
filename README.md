@@ -614,7 +614,7 @@ You can configure Application Gateway to store diagnostic logs and metrics to Lo
 
 ## Visio ##
 
-In the **visio** folder you can find the Visio document which contains the above diagrams.
+The [Visio](https://github.com/paolosalvatori/aks-multi-tenant-agic/blob/main/visio/aks.vsdx?raw=true) document contains all the above diagrams.
 
 ## References ##
 
