@@ -1,0 +1,9 @@
+{
+    "$schema": "https://aka.ms/azure-quickstart-templates-metadata-schema#",
+    "type": "QuickStart",
+    "itemDisplayName": "App Gateway Ingress Controller in a multi-tenant AKS cluster",
+    "description": "This sample shows how to use the Application Gateway Ingress Controller in a multi-tenant AKS cluster to expose multiple instances of the same application, one for each tenant.",
+    "summary": "This sample shows how to use the Application Gateway Ingress Controller in a multi-tenant AKS cluster to expose multiple instances of the same application, one for each tenant.",
+    "githubUsername": "paolosalvatori",
+    "dateUpdated": "2021-02-24"
+}
