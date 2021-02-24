@@ -5,7 +5,7 @@ author: paolosalvatori
 
 # Use Application Gateway Ingress Controller in a multi-tenant AKS cluster #
 
-This sample shows how to use the Application Gateway Ingress Controller in a multi-tenant AKS cluster to expose multiple instances of the same application, one for each tenant.
+This sample shows how to use the Application Gateway Ingress Controller in a multi-tenant AKS cluster to expose multiple instances of the same application, one for each tenant, using a different subdomain.
 
 ## Multi-tenancy ##
 
