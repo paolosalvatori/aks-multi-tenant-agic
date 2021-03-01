@@ -18,37 +18,39 @@ sleepInterval=2
 for tenant in ${tenants[@]}; do
 
     # Create the namespace for the tenant if it doesn't already exists in the cluster
-    result=$(kubectl get namespace | grep $tenant | awk '{print $1}')
+    #result=$(kubectl get namespace | grep $tenant | awk '{print $1}')
+    result=$(kubectl get namespace -o jsonpath="{.items[?(@.metadata.name=='$tenant')].metadata.name}")
 
     if [[ -n $result ]]; then
-        echo "$tenant namespace already exists in the cluster"
+        echo "[$tenant] namespace already exists in the cluster"
     else
-        echo "$tenant namespace does not exist in the cluster"
-        echo "creating $tenant namespace in the cluster..."
+        echo "[$tenant] namespace does not exist in the cluster"
+        echo "creating [$tenant] namespace in the cluster..."
         kubectl create namespace $tenant
     fi
 
     # Create the deployment for the tenant if it doesn't already exists in the cluster
-    result=$(kubectl get deployment -n $tenant | grep $deploymentName | awk '{print $1}')
+    result=$(kubectl get deployment -n $tenant -o jsonpath="{.items[?(@.metadata.name=='$deploymentName')].metadata.name}")
+
 
     if [[ -n $result ]]; then
-        echo "$deploymentName deployment already exists in the [$tenant] namespace"
+        echo "[$deploymentName] deployment already exists in the [$tenant] namespace"
     else
-        echo "$deploymentName deployment does not exist in the [$tenant] namespace"
-        echo "creating $deploymentName deployment in the [$tenant] namespace..."
+        echo "[$deploymentName] deployment does not exist in the [$tenant] namespace"
+        echo "creating [$deploymentName] deployment in the [$tenant] namespace..."
         cat $deploymentTemplate |
             yq -Y "(.spec.template.spec.containers[0].image)|="\""$imageName"\" |
             kubectl apply -n $tenant -f -
     fi
 
     # Create the service for the tenant if it doesn't already exists in the cluster
-    result=$(kubectl get service -n $tenant | grep $serviceName | awk '{print $1}')
+    result=$(kubectl get service -n $tenant -o jsonpath="{.items[?(@.metadata.name=='$serviceName')].metadata.name}")
 
     if [[ -n $result ]]; then
-        echo "$serviceName service already exists in the [$tenant] namespace"
+        echo "[$serviceName] service already exists in the [$tenant] namespace"
     else
-        echo "$serviceName service does not exist in the [$tenant] namespace"
-        echo "creating $serviceName service in the [$tenant] namespace..."
+        echo "[$serviceName] service does not exist in the [$tenant] namespace"
+        echo "creating [$serviceName] service in the [$tenant] namespace..."
         kubectl apply -n $tenant -f $serviceTemplate
     fi
 
@@ -77,7 +79,7 @@ for tenant in ${tenants[@]}; do
         publicIpAddress=$(kubectl get ingress $ingressName -n $tenant -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
         if [[ -n $publicIpAddress ]]; then
-            if [[ i > 0 ]]; then
+            if [[ $i > 0 ]]; then
                 echo ''
             fi
             echo "[$publicIpAddress] external IP address successfully retrieved from the [$ingressName] ingress in the [$tenant] namespace"
