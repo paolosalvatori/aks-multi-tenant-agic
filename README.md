@@ -36,6 +36,35 @@ This diagram shows the architecture used to test the sample. For more informatio
 
 ![Architecture](images/architecture.png)
 
+In this architecture, the [Application Gateway Ingress Controller](https://azure.github.io/application-gateway-kubernetes-ingress/) was installed using the [AGIC add-on for AKS](https://docs.microsoft.com/en-us/azure/application-gateway/tutorial-ingress-controller-add-on-new). You can also [install the Application Gateway Ingress Controller via a Helm chart](https://docs.microsoft.com/en-us/azure/application-gateway/ingress-controller-install-existing#multi-cluster--shared-application-gateway). The primary benefit of deploying AGIC as an AKS add-on is that it's much simpler than deploying through Helm. For a new setup, you can deploy a new Application Gateway and a new AKS cluster with AGIC enabled as an add-on in one line in Azure CLI. The add-on is also a fully managed service, which provides added benefits such as automatic updates and increased support. Both ways of deploying AGIC (Helm and AKS add-on) are fully supported by Microsoft. Additionally, the add-on allows for better integration with AKS as a first class add-on.
+
+The AGIC add-on is still deployed as a pod in the customer's AKS cluster, however, there are a few differences between the Helm deployment version and the add-on version of AGIC. Below is a list of differences between the two versions:
+
+- Helm deployment values cannot be modified on the AKS add-on:
+
+  - `verbosityLevel` will be set to 5 by default
+  - `usePrivateIp` will be set to be false by default; this can be overwritten by the use-private-ip annotation
+  - `shared` is not supported on add-on
+  - `reconcilePeriodSeconds` is not supported on add-on
+  - `armAuth.type` is not supported on add-on
+
+- AGIC deployed via Helm supports `ProhibitedTargets`, which means AGIC can configure the Application Gateway specifically for AKS clusters without affecting other existing backends. AGIC add-on doesn't currently support this.
+- Since AGIC add-on is a managed service, customers will automatically be updated to the latest version of AGIC add-on, unlike AGIC deployed through Helm where the customer must manually update AGIC.
+- As shown in the following picture, customers can only deploy one AGIC add-on per AKS cluster, and each AGIC add-on currently can only target one Application Gateway. For deployments that require more than one AGIC per cluster or multiple AGICs targeting one Application Gateway, please continue to use AGIC deployed through Helm.
+
+![Installation](images/installation.png)
+
+[Azure subscription and service limits, quotas, and constraints](https://docs.microsoft.com/en-us/azure/azure-resource-manager/management/azure-subscription-service-limits#networking-limits) documentation reports that the max number of:
+
+- Active Listeners
+- Backend Pools
+- HTTP Load Balancing Rules
+- HTTP Settings
+- Authentication certificates
+- Etc.
+
+is 100, and in case of WAF-enabled SKUs, this limit is 40. This hard limit implies that the maximum number of tenants that can be served by a single AGIC is equal to 100 when using Application Gateway Standard V2, and 40 for Application Gateway WAF V2.
+
 ## Application Gateway Ingress Controller ##
 
 The [Application Gateway Ingress Controller](https://azure.github.io/application-gateway-kubernetes-ingress/) (AGIC) allows Azure Application Gateway to be used as the ingress for an [Azure Kubernetes Service](https://azure.microsoft.com/en-us/services/kubernetes-service/) also known as AKS cluster. As shown in the figure below, the ingress controller runs as a pod within the AKS cluster. It consumes [Kubernetes Ingress Resources](http://kubernetes.io/docs/user-guide/ingress/) and converts their settings to an Azure Application Gateway configuration which allows the gateway to load-balance traffic to Kubernetes pods. This sample shows how to deploy a sizeable number of instances of an ASP.NET Core application, one for each tenant, and how the Application Gateway Ingress Controller pod translates the configuration of each ingress resource to a configuration of the Application Gateway to expose each tenant specific app using a dedicated subdomain, as shown in the following picture:
