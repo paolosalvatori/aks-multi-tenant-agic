@@ -63,7 +63,7 @@ The AGIC add-on is still deployed as a pod in the customer's AKS cluster, howeve
 - Authentication certificates
 - Etc.
 
-is 100, and in case of WAF-enabled SKUs, this limit is 40. This hard limit implies that the maximum number of tenants that can be served by a single AGIC is equal to 100 when using Application Gateway Standard V2, and 40 for Application Gateway WAF V2.
+is 100, and in case of WAF-enabled SKUs, this limit is 40. This implies that the maximum number of tenants that can be served by a single AGIC is equal to 100 when using Application Gateway Standard V2, and 40 for Application Gateway WAF V2.
 
 ## Application Gateway Ingress Controller ##
 
