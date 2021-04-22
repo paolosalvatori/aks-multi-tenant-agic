@@ -32,7 +32,6 @@ for tenant in ${tenants[@]}; do
     # Create the deployment for the tenant if it doesn't already exists in the cluster
     result=$(kubectl get deployment -n $tenant -o jsonpath="{.items[?(@.metadata.name=='$deploymentName')].metadata.name}")
 
-
     if [[ -n $result ]]; then
         echo "[$deploymentName] deployment already exists in the [$tenant] namespace"
     else
