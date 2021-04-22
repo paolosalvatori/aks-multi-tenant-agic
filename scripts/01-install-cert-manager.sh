@@ -16,14 +16,6 @@ if [[ -z $path ]]; then
     apt install -y jq
 fi
 
-# Install yq if not installed
-path=$(which yq)
-
-if [[ -z $path ]]; then
-    echo 'Installing yq...'
-    pip3 install yq
-fi
-
 # check if namespace exists in the cluster
 result=$(kubectl get ns -o jsonpath="{.items[?(@.metadata.name=='$namespace')].metadata.name}")
 
