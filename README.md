@@ -29,6 +29,7 @@ The following components are required to run this sample:
 - [Azure CLI](https://docs.microsoft.com/cli/azure/install-azure-cli?view=azure-cli-latest)
 - [Azure subscription](https://azure.microsoft.com/free/)
 - [Azure DNS Zone](https://docs.microsoft.com/en-us/azure/dns/dns-overview) configured with an existing DNS domain
+- (Optional)[Helm](https://helm.sh)
 
 ## Architecture ##
 
@@ -122,22 +123,6 @@ chartName="cert-manager"
 releaseName="cert-manager"
 version="v1.2.0"
 
-# Install jq if not installed
-path=$(which jq)
-
-if [[ -z $path ]]; then
-    echo 'Installing jq...'
-    apt install -y jq
-fi
-
-# Install yq if not installed
-path=$(which yq)
-
-if [[ -z $path ]]; then
-    echo 'Installing yq...'
-    pip3 install yq
-fi
-
 # check if namespace exists in the cluster
 result=$(kubectl get ns -o jsonpath="{.items[?(@.metadata.name=='$namespace')].metadata.name}")
 
@@ -192,7 +177,7 @@ fi
 # Variables
 email="<your-email-address>"
 namespace="default"
-clusterIssuer="letsencrypt"
+clusterIssuer="letsencrypt-application-gateway"
 template="cluster-issuer.yml"
 
 # Check if the cluster issuer already exists
@@ -215,7 +200,7 @@ The script uses the `cluster-issuer.yml` YAML manifest:
 apiVersion: cert-manager.io/v1alpha2
 kind: ClusterIssuer
 metadata:
-  name: letsencrypt
+  name: letsencrypt-application-gateway
 spec:
   acme:
 
@@ -272,26 +257,186 @@ echo "This is the [$imageName:$tag] container image in the [$acrName] Azure Cont
 az acr repository show --name $acrName \
                        --image $imageName:$tag 
 ```
-
-- Run the `04-deploy-app-instances.sh` script to deploy an instance of the application for each tenant specified in the `tenants` array. For each tenant, the script will:
+- The sample provides a [Helm](https://helm.sh/) chart in the `syntheticapi` folder. Run the `04-deploy-apps-via-helm.sh` script to deploy an instance of the application for each tenant specified in the `tenants` array. If you use For each tenant, the Helm chart will:
 
   - Create a namespace
+  - Create a service account in the tenant namespace
   - Create a deployment for the application instance in the tenant namespace
   - Create a service for the application instance in the tenant namespace
   - Create an ingress in the tenant namespace with <tenant-name>.<domain-name> as hostname
-  - Wait for the AGIC pod to read the configuration from the API server, create the configuration in the Application Gateway, and update the ingress with the public IP address of the Application Gateway.
   - Read the public IP address from the ingress
   - Check if an A record exists in the DNS zone on Azure. If yes, the script will delete it.
   - Create an A record with the name of the tenant and the Application Gateway public IP as address
 
-  **NOTE**: Ensure you Application Gateway has a public Frontend IP configuration with a DNS name (either using the default azure.com domain, or provision a Azure DNS Zone service, and assign your own custom domain). Also, make sure to update all the placeholders before running in the bash script. Feel free to change the name of the deployment, ingress, service, or the number and name of sample tenants.
+  **NOTE**: Ensure that your Application Gateway has a public Frontend IP configuration with a public DNS name. Also, make sure to update all the placeholders before running the bash script. Feel free to change the name of the deployment, ingress, service, or the number and name of sample tenants.
 
 ```sh
 #!/bin/bash
 
 # Variables
 tenants=("mars" "jupiter" "saturn")
-acrName="<acr-name>"
+acrName="SallyAcr"
+chart="../syntheticapi"
+imageName="${acrName,,}.azurecr.io/syntheticapi"
+imageTag="latest"
+dnsZoneName="babosbird.com"
+dnsZoneResourceGroupName="DnsResourceGroup"
+retries=150
+sleepInterval=2
+
+for tenant in ${tenants[@]}; do
+
+    # Check if the Helm release already exists
+    echo "Checking if a [$tenant] Helm release exists in the [$tenant] namespace..."
+    release=$(helm list -n $tenant | awk '{print $1}' | grep -Fx $tenant)
+    hostname="$tenant.$dnsZoneName"
+
+    if [[ -n $release ]]; then
+        # Install the Helm chart for the tenant to a dedicated namespace
+        echo "A [$tenant] Helm release already exists in the [$tenant] namespace"
+        echo "Upgrading the [$tenant] Helm release to the [$tenant] namespace via Helm..."
+        helm upgrade $tenant $chart \
+        --set image.repository=$imageName \
+        --set image.tag=$imageTag \
+        --set nameOverride=$tenant \
+        --set ingress.hosts[0].host=$hostname \
+        --set ingress.tls[0].hosts[0]=$hostname
+
+        if [[ $? == 0 ]]; then
+            echo "[$tenant] Helm release successfully upgraded to the [$tenant] namespace via Helm"
+        else
+            echo "Failed to upgrade [$tenant] Helm release to the [$tenant] namespace via Helm"
+            exit
+        fi
+    else
+        # Install the Helm chart for the tenant to a dedicated namespace
+        echo "The [$tenant] Helm release does not exist in the [$tenant] namespace"
+        echo "Deploying the [$tenant] Helm release to the [$tenant] namespace via Helm..."
+        helm install $tenant $chart \
+        --create-namespace \
+        --namespace $tenant \
+        --set image.repository=$imageName \
+        --set image.tag=$imageTag \
+        --set nameOverride=$tenant \
+        --set ingress.hosts[0].host=$hostname \
+        --set ingress.tls[0].hosts[0]=$hostname
+
+        if [[ $? == 0 ]]; then
+            echo "[$tenant] Helm release successfully deployed to the [$tenant] namespace via Helm"
+        else
+            echo "Failed to install [$tenant] Helm release to the [$tenant] namespace via Helm"
+            exit
+        fi
+    fi
+
+    # Retrieve the public IP address from the ingress
+    ingressName=$tenant
+    echo "Retrieving the external IP address from the [$ingressName] ingress..."
+    for ((i = 0; i < $retries; i++)); do
+        sleep $sleepInterval
+        publicIpAddress=$(kubectl get ingress $ingressName -n $tenant -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+        if [[ -n $publicIpAddress ]]; then
+            if [[ $i > 0 ]]; then
+                echo ''
+            fi
+            echo "[$publicIpAddress] external IP address successfully retrieved from the [$ingressName] ingress in the [$tenant] namespace"
+            break
+        else
+            echo -n "."
+        fi
+    done
+
+    if [[ -z $publicIpAddress ]]; then
+        echo "Failed to retrieve the external IP address from the [$ingressName] ingress in the [$tenant] namespace"
+        exit
+    fi
+
+    # Check if an A record for todolist subdomain exists in the DNS Zone
+    echo "Retrieving the A record for the [$tenant] subdomain from the [$dnsZoneName] DNS zone..."
+    ipv4Address=$(az network dns record-set a list \
+        --zone-name $dnsZoneName \
+        --resource-group $dnsZoneResourceGroupName \
+        --query "[?name=='$tenant'].aRecords[].ipv4Address" \
+        --output tsv)
+
+    if [[ -n $ipv4Address ]]; then
+        echo "An A record already exists in [$dnsZoneName] DNS zone for the [$tenant] subdomain with [$ipv4Address] IP address"
+
+        if [[ $ipv4Address == $publicIpAddress ]]; then
+            echo "The [$ipv4Address] ip address of the existing A record is equal to the ip address of the [$ingressName] ingress"
+            echo "No additional step is required"
+            continue
+        else
+            echo "The [$ipv4Address] ip address of the existing A record is different than the ip address of the [$ingressName] ingress"
+        fi
+
+        # Retrieving name of the record set relative to the zone
+        echo "Retrieving the name of the record set relative to the [$dnsZoneName] zone..."
+
+        recordSetName=$(az network dns record-set a list \
+            --zone-name $dnsZoneName \
+            --resource-group $dnsZoneResourceGroupName \
+            --query "[?name=='$tenant'].name" \
+            --output tsv 2>/dev/null)
+
+        if [[ -n $recordSetName ]]; then
+            echo "[$recordSetName] record set name successfully retrieved"
+        else
+            echo "Failed to retrieve the name of the record set relative to the [$dnsZoneName] zone"
+            exit
+        fi
+
+        # Remove the A record
+        echo "Removing the A record from the record set relative to the [$dnsZoneName] zone..."
+
+        az network dns record-set a remove-record \
+            --ipv4-address $ipv4Address \
+            --record-set-name $recordSetName \
+            --zone-name $dnsZoneName \
+            --resource-group $dnsZoneResourceGroupName
+
+        if [[ $? == 0 ]]; then
+            echo "[$ipv4Address] ip address successfully removed from the [$recordSetName] record set"
+        else
+            echo "Failed to remove the [$ipv4Address] ip address from the [$recordSetName] record set"
+            exit
+        fi
+    fi
+
+    # Create the A record
+    echo "Creating an A record in [$dnsZoneName] DNS zone for the [$tenant] subdomain with [$publicIpAddress] IP address..."
+    az network dns record-set a add-record \
+        --zone-name $dnsZoneName \
+        --resource-group $dnsZoneResourceGroupName \
+        --record-set-name $tenant \
+        --ipv4-address $publicIpAddress 1>/dev/null
+
+    if [[ $? == 0 ]]; then
+        echo "A record for the [$tenant] subdomain with [$publicIpAddress] IP address successfully created in [$dnsZoneName] DNS zone"
+    else
+        echo "Failed to create an A record for the $tenant subdomain with [$publicIpAddress] IP address in [$dnsZoneName] DNS zone"
+    fi
+
+done
+```
+
+- As an alternative, you can run the `05-deploy-apps-via-kubectl.sh` script to deploy an instance of the application for each tenant without using [Helm](https://helm.sh/). If you use For each tenant, the script will:
+
+  - Create a namespace
+  - Create a deployment for the application instance in the tenant namespace
+  - Create a service for the application instance in the tenant namespace
+  - Create an ingress in the tenant namespace with <tenant-name>.<domain-name> as hostname
+  - Read the public IP address from the ingress
+  - Check if an A record exists in the DNS zone on Azure. If yes, the script will delete it.
+  - Create an A record with the name of the tenant and the Application Gateway public IP as address
+
+```sh
+#!/bin/bash
+
+# Variables
+tenants=("mars" "jupiter" "saturn")
+acrName="SallyAcr"
 imageName="${acrName,,}.azurecr.io/syntheticapi:latest"
 deploymentName="syntheticapi"
 deploymentTemplate="deployment.yml"
@@ -299,8 +444,8 @@ serviceName="syntheticapi"
 serviceTemplate="service.yml"
 ingressName="syntheticapi"
 ingressTemplate="ingress.yml"
-dnsZoneName="<dns-zone-name>"
-dnsZoneResourceGroupName="<dns-zone-resource-group>"
+dnsZoneName="babosbird.com"
+dnsZoneResourceGroupName="DnsResourceGroup"
 retries=150
 sleepInterval=2
 
@@ -388,7 +533,7 @@ for tenant in ${tenants[@]}; do
     ipv4Address=$(az network dns record-set a list \
         --zone-name $dnsZoneName \
         --resource-group $dnsZoneResourceGroupName \
-        --query "[?name=='$tenant'].arecords[].ipv4Address" \
+        --query "[?name=='$tenant'].aRecords[].ipv4Address" \
         --output tsv)
 
     if [[ -n $ipv4Address ]]; then
@@ -409,12 +554,12 @@ for tenant in ${tenants[@]}; do
             --zone-name $dnsZoneName \
             --resource-group $dnsZoneResourceGroupName \
             --query "[?name=='$tenant'].name" \
-            --output name 2>/dev/null)
+            --output tsv 2>/dev/null)
 
         if [[ -n $recordSetName ]]; then
-            "[$recordSetName] record set name successfully retrieved"
+            echo "[$recordSetName] record set name successfully retrieved"
         else
-            "Failed to retrieve the name of the record set relative to the [$dnsZoneName] zone"
+            echo "Failed to retrieve the name of the record set relative to the [$dnsZoneName] zone"
             exit
         fi
 
@@ -452,142 +597,8 @@ for tenant in ${tenants[@]}; do
 done
 ```
 
-The script uses the `deployment.yml` YAML manifest to create the deployment in the tenant namespace with 3 replicas, each located in a separate availability zone. The YAML manifest makes use of the [Pod Topology Spread Constraints](https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/) to spread the replicas across the availability zones of a target node pool.
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: syntheticapi
-  labels:
-    app: syntheticapi
-    role: frontend
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: syntheticapi
-      role: frontend
-  strategy:
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 1
-  minReadySeconds: 5
-  template:
-    metadata:
-      labels:
-        app: syntheticapi
-        role: frontend
-    spec:
-      topologySpreadConstraints:
-      - maxSkew: 1
-        topologyKey: topology.kubernetes.io/zone
-        whenUnsatisfiable: DoNotSchedule
-        labelSelector:
-          matchLabels:
-            app: syntheticapi
-            role: frontend
-      - maxSkew: 1
-        topologyKey: kubernetes.io/hostname
-        whenUnsatisfiable: DoNotSchedule
-        labelSelector:
-          matchLabels:
-            app: syntheticapi
-            role: frontend
-      nodeSelector:
-        "beta.kubernetes.io/os": linux
-      containers:
-      - name: syntheticapi
-        image: acrname.azurecr.io/syntheticapi:latest
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "250m"
-          limits:
-            memory: "128Mi"
-            cpu: "500m"
-        ports:
-        - containerPort: 80
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 80
-          failureThreshold: 1
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 80
-          failureThreshold: 1
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        startupProbe:
-          httpGet:
-            path: /
-            port: 80
-          failureThreshold: 30
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        env:
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
-        - name: HOST_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.hostIP
-```
-
-The script uses the `service.yml` YAML manifest to deploy the service of type `ClusterIP` which uses a label selector to reference the pods from the deployment located in the same namespace. The service exposes the web app via the port 80.
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: syntheticapi
-  labels:
-    app: syntheticapi
-    role: frontend
-spec:
-  type: ClusterIP
-  ports:
-  - protocol: TCP
-    port: 80
-  selector:
-    app: syntheticapi
-    role: frontend
-```
-
-The script makes use of the `ingress.yml` YAML template to deploy the ingress in the tenant namespace. The ingress resource uses the `cert-manager` to get a TLS certificate from `Lets Encrypt` for the tenant hostname. Note the annotation [cert-manager.io/cluster-issuer: letsencrypt](https://cert-manager.io/docs/usage/ingress/#supported-annotations), which tells the `cert-manager` to process the tagged Ingress resource. Some if the elements in the YAML manifest get replaced by the bash script using the [yq](https://kislyuk.github.io/yq/) before the deployment. **NOTE**: the [https://kubernetes.io/docs/concepts/services-networking/ingress/](https://kubernetes.io/docs/concepts/services-networking/ingress/) used to degine the Application Gateway Ingress Controller as ingress controller has been deprecated and replaced by the new `ingressClassName`.
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: syntheticapi
-  annotations:
-    kubernetes.io/ingress.class: azure/application-gateway
-    cert-manager.io/cluster-issuer: letsencrypt
-    cert-manager.io/acme-challenge-type: http01
-spec:
-  tls:
-  - hosts:
-    - syntheticapi.foo.com
-    secretName: tls-secret
-  rules:
-  - host: syntheticapi.foo.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: syntheticapi
-            port:
-              number: 80
-```
+**NOTE**: The ingress resource uses the `cert-manager` to get a TLS certificate from `Lets Encrypt` for the tenant hostname. Note the annotation [cert-manager.io/cluster-issuer: letsencrypt](https://cert-manager.io/docs/usage/ingress/#supported-annotations), which tells the `cert-manager` to process the tagged Ingress resource. Some if the elements in the YAML manifest get replaced by the bash script using the [yq](https://kislyuk.github.io/yq/) before the deployment. 
+**NOTE**: the [https://kubernetes.io/docs/concepts/services-networking/ingress/](https://kubernetes.io/docs/concepts/services-networking/ingress/) used to define the Application Gateway Ingress Controller as ingress controller has been deprecated and replaced by the new `ingressClassName`.
 
 ## Test the Deployment ##
 

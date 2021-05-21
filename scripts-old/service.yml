@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: syntheticapi
+  labels:
+    app: syntheticapi
+    role: frontend
+spec:
+  type: ClusterIP
+  ports:
+  - protocol: TCP
+    port: 80
+  selector:
+    app: syntheticapi
+    role: frontend

@@ -6,7 +6,7 @@ metadata:
     app: syntheticapi
     role: frontend
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: syntheticapi
@@ -41,7 +41,7 @@ spec:
         "beta.kubernetes.io/os": linux
       containers:
       - name: syntheticapi
-        image: paolosalvatori.azurecr.io/syntheticapi:latest
+        image: acrname.azurecr.io/syntheticapi:latest
         resources:
           requests:
             memory: "64Mi"

@@ -8,6 +8,14 @@ chartName="cert-manager"
 releaseName="cert-manager"
 version="v1.2.0"
 
+# Install jq if not installed
+path=$(which jq)
+
+if [[ -z $path ]]; then
+    echo 'Installing jq...'
+    apt install -y jq
+fi
+
 # check if namespace exists in the cluster
 result=$(kubectl get ns -o jsonpath="{.items[?(@.metadata.name=='$namespace')].metadata.name}")
 

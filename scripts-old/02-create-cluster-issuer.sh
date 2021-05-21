@@ -3,7 +3,7 @@
 # Variables
 email="<your-email-address>"
 namespace="default"
-clusterIssuer="letsencrypt-application-gateway"
+clusterIssuer="letsencrypt"
 template="cluster-issuer.yml"
 
 # Check if the cluster issuer already exists
