@@ -242,7 +242,8 @@ tag="latest"
 # Login to ACR
 az acr login --name ${acrName,,} 
 
-# Retrieve ACR login server. Each container image needs to be tagged with the loginServer name of the registry. 
+# Retrieve ACR login server. Each container image needs to be 
+# tagged with the loginServer name of the registry. 
 echo "Logging to [$acrName] Azure Container Registry..."
 loginServer=$(az acr show --name $acrName --query loginServer --output tsv)
 
