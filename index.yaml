@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  syntheticapi:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2021-11-02T18:55:32.8251631+01:00"
+    description: A Helm chart for Kubernetes
+    digest: c2e0926493e067d6dae7390e9e217497a1a18113e27bae7dd13565c9fef64fff
+    name: syntheticapi
+    type: application
+    urls:
+    - https://babohelm.blob.core.windows.net/helm/syntheticapi-0.1.0.tgz
+    version: 0.1.0
+generated: "2021-11-02T18:55:32.8165483+01:00"
