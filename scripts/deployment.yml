@@ -38,7 +38,7 @@ spec:
             app: syntheticapi
             role: frontend
       nodeSelector:
-        "beta.kubernetes.io/os": linux
+        "kubernetes.io/os": linux
       containers:
       - name: syntheticapi
         image: paolosalvatori.azurecr.io/syntheticapi:latest

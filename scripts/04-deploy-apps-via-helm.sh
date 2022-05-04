@@ -2,11 +2,11 @@
 
 # Variables
 tenants=("mars" "jupiter" "saturn")
-acrName="SallyAcr"
+acrName="<your-azure-container-registry>"
 chart="../syntheticapi"
 imageName="${acrName,,}.azurecr.io/syntheticapi"
 imageTag="latest"
-dnsZoneName="babosbird.com"
+dnsZoneName="babosbird.com" #e.g. contoso.com
 dnsZoneResourceGroupName="DnsResourceGroup"
 retries=150
 sleepInterval=2
@@ -23,6 +23,7 @@ for tenant in ${tenants[@]}; do
         echo "A [$tenant] Helm release already exists in the [$tenant] namespace"
         echo "Upgrading the [$tenant] Helm release to the [$tenant] namespace via Helm..."
         helm upgrade $tenant $chart \
+        --namespace $tenant \
         --set image.repository=$imageName \
         --set image.tag=$imageTag \
         --set nameOverride=$tenant \
@@ -97,7 +98,6 @@ for tenant in ${tenants[@]}; do
         else
             echo "The [$ipv4Address] ip address of the existing A record is different than the ip address of the [$ingressName] ingress"
         fi
-
         # Retrieving name of the record set relative to the zone
         echo "Retrieving the name of the record set relative to the [$dnsZoneName] zone..."
 

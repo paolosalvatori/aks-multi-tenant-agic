@@ -2,7 +2,7 @@
 
 # Variables
 tenants=("mars" "jupiter" "saturn")
-dnsZoneName="babosbird.com"
+dnsZoneName="<your-domain>" #e.g. contoso.com
 dnsZoneResourceGroupName="DnsResourceGroup"
 
 for tenant in ${tenants[@]}; do

@@ -6,21 +6,7 @@ repoName="jetstack"
 repoUrl="https://charts.jetstack.io"
 chartName="cert-manager"
 releaseName="cert-manager"
-version="v1.2.0"
-
-# check if namespace exists in the cluster
-result=$(kubectl get ns -o jsonpath="{.items[?(@.metadata.name=='$namespace')].metadata.name}")
-
-if [[ -n $result ]]; then
-    echo "$namespace namespace already exists in the cluster"
-else
-    echo "$namespace namespace does not exist in the cluster"
-    echo "creating $namespace namespace in the cluster..."
-    kubectl create namespace $namespace
-fi
-
-# Label the ingress-basic namespace to disable resource validation
-kubectl label namespace $namespace cert-manager.io/disable-validation=true
+version="v1.7.2"
 
 # Check if the ingress-nginx repository is not already added
 result=$(helm repo list | grep $repoName | awk '{print $1}')
@@ -46,8 +32,9 @@ else
     # Install the cert-manager Helm chart
     echo "Deploying [$releaseName] cert-manager to the $namespace namespace..."
     helm install $releaseName $repoName/$chartName \
+        --create-namespace \
         --namespace $namespace \
-        --version $version \
         --set installCRDs=true \
-        --set nodeSelector."beta\.kubernetes\.io/os"=linux
+        --set version $version \
+        --set nodeSelector."kubernetes\.io/os"=linux
 fi

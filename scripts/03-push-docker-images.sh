@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Variables
-acrName="SallyAcr"
+acrName="<your-azure-container-registry>"
 imageName="syntheticapi"
 tag="latest"
 

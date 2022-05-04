@@ -16,5 +16,5 @@ else
     # Create the cluster issuer 
     echo "[$clusterIssuer] cluster issuer does not exist"
     echo "Creating [$clusterIssuer] cluster issuer..."
-    cat $template | yq -Y "(.spec.acme.email)|="\""$email"\" | kubectl apply -n $namespace -f -
+    cat $template | yq "(.spec.acme.email)|="\""$email"\" | kubectl apply -n $namespace -f -
 fi

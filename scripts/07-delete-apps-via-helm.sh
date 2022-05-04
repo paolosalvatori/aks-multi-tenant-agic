@@ -2,7 +2,7 @@
 
 # Variables
 tenants=("red" "blue" "green")
-dnsZoneName="babosbird.com"
+dnsZoneName="<your-domain>" #e.g. contoso.com
 dnsZoneResourceGroupName="DnsResourceGroup"
 
 for tenant in ${tenants[@]}; do
